@@ -20,7 +20,7 @@ The following diagram illustrates the use of two `namespaces` and two `InstanceG
 
 > **NOTE:** As of the date of this post, the Azure Kubernetes Service (AKS) does not support multiple node pools - [per this GitHub issue it is on their roadmap](https://github.com/Azure/AKS/issues/287).
 
-## Kubernetes Admission Controllers
+## Kubernetes Admission Controllers {#configure-kops-admission-controllers}
 To achieve segregation for the Jenkins agent workload to a specific `node pool`/`InstanceGroup`, we turn to [Kubernetes Admission Controllers](https://kubernetes.io/docs/admin/admission-controllers/#what-are-they). Even if you don’t know what the Kubernetes Admission Controllers are or do, chances are that you have benefited from them if you have ever interacted with a Kubernetes cluster. For example, if you use a default `StorageClass` or a `ServiceAccount` then you are depending on an Admission Controller. In this case, we are going to utilize the [`PodNodeSelector` Admisssion Controller](https://kubernetes.io/docs/admin/admission-controllers/#podnodeselector). But first, we have to enable it for our cluster. For the version of kops used for this post - `1.9.3` - the following Admission Controllers are enabled by default (as you can see in the code for kops 1.9 [here](https://github.com/kubernetes/kops/blob/release-1.9/pkg/model/components/apiserver.go#L227) that is based on a [recommended set of admission controllers](https://kubernetes.io/docs/admin/admission-controllers/#is-there-a-recommended-set-of-admission-controllers-to-use)):
 
 ```yaml
@@ -99,7 +99,7 @@ If you already have a configuration entry for the `kubeAPIServer` then just add 
 
 > **NOTE:** If you are enabling additional admission controllers on a new cluster you should do it before you apply the configuration or a rolling-update of all of your cluster nodes will be required.  
 
-## Putting It All Together
+## Putting It All Together {#putting-it-all-together}
 So now that we have the `PodNodeSelector` admission controller enabled we can create the `node pools` and `namespaces`.
 #### Node Pools
 We will create two `node pools` - one for Jenkins masters and one for Jenkins agents.
@@ -125,7 +125,7 @@ spec:
   subnets:
   - us-east-1b
 ```
-Next we will create the `node pool` for Jenkins agents with `kops create ig jenkins-agents` and add `jenkinsType: agent` as an additional `nodeLabel`. It should look similar to the following when you are done:
+{#jenkins-agent-instance-group}Next we will create the `node pool` for Jenkins agents with `kops create ig jenkins-agents` and add `jenkinsType: agent` as an additional `nodeLabel`. It should look similar to the following when you are done:
 ```yaml
 apiVersion: kops/v1alpha2
 kind: InstanceGroup

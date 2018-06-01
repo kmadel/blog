@@ -1,74 +1,83 @@
 ---
 title: Autoscaling Jenkins Agents with Kubernetes
 series: ["CICD on Kubernetes"]
+tags: ["Kubernetes","Jenkins","CI","CD","autoscaling"]
 part: 2
-date: 2018-05-21T06:29:15-04:00
+date: 2018-05-27T07:09:15-04:00
 draft: true
 ---
-In [Part 1]({{< ref "segregating-jenkins-agents-on-kubernetes.md" >}}) of the series [CI/CD on Kubernetes](/series/cicd-on-kubernetes/) we explored Kubernetes admission controllers and used the `PodNodeSelector` to segregate our Jenkins workload - agents from masters. In Part 2 of the CI/CD on Kubernetes series we will utilize that segregation as part of an auto-scaling solution for the Jenkins agent workload, while leaving our Jenkins master(s) more static.
-## Why Autoscale
-The [Jenkins Kubernetes Plugin](https://github.com/jenkinsci/kubernetes-plugin) provides the capability to provision dynamic and ephemeral Jenkins agents as `Pods` managed by Kubernetes. And while very useful, that is not the same thing as auto-scaling the actual physical (or virtual - VMs, EC2 instances, etc) resources for these Pods. So, without true auto-scaling, there will be a finite amount of resources available for your Jenkins agents (and any other applications utilizing those same Kubernetes nodes); and when and if all of those resources are consumed - any additional Jenkins workload will be queued. Furthermore, if you have consistent (or even random) spikes in your CI/CD load then auto-scaling your agent capacity could be a solution - especially in a cloud environment like AWS, Azure, GCP, etc.
+In [Part 1]({{< ref "segregating-jenkins-agents-on-kubernetes.md" >}}) of the series [CI/CD on Kubernetes](/series/cicd-on-kubernetes/) we used the `PodNodeSelector` to segregate the Jenkins workload - agents from masters - and explored a few Kubernetes admission controllers. In Part 2 of this CI/CD on Kubernetes series we will utilize the segregated `jenkins-agents` `node pool` as part of an autoscaling solution for the Jenkins agent workload, without impacting the availability or performance of the Jenkins masters `node pool`. But before diving into the autoscaling solution for Jenkins agents we will take a look at `ResourceQuotas` and `LimitRanges` - two more admission controllers.
 
-True auto-scaling will allow your CI/CD to move as fast as it needs to - limiting slow-downs related to lack of infrastructure within some maximum limits (of course it is important to set reasonable limits to avoid large costs due to a mis-configured jobs or other user error). And remember, scaling down is just as important as scaling up - it is the down-scaling that will reduce costs, while it is the up-scaling that will save time - time to market - and hopefully, time to profit. 
+> **NOTE:** The configuration examples used in this series are from a Kubernetes cluster deployed in AWS using [Kubernetes Operations or kops](https://github.com/kubernetes/kops) version [1.9](https://github.com/kubernetes/kops/blob/master/docs/releases/1.9-NOTES.md) with [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) enabled (which is the default authorization mode for kops 1.9). Therefore, certains steps and aspects of the configurations presented may be different for other Kuberenetes platforms.
 
-In this post we will explore setting up auto-scaling for Jenkins agents with Kubernetes running on AWS using [Kubernetes Operations or kops](https://github.com/kubernetes/kops). While there are some aspects of the solution presented here that are unique to **kops**, the main ideas presented should be applicable to any cloud provider. We will also explore some additional Kubernetes features to provide predictive auto-scaling; allowing further avoidance, or at least limiting, the amount of time that any Jenkins job spends in the Jenkins build queue waiting for new infrastructure to be auto-scaled. All the while only using the amount of infrastructure you need for any given window of time.
-## Kubernetes Autoscaler Project
-The [Kubernetes Autoscaler](https://github.com/kubernetes/autoscaler) project provides a [Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler) component with support for AWS, GCP and Azure. A GA version was released alongside the release of Kubernetes 1.8.  The Cluster Autoscaler runs as a Kubernetes Deployment on your cluster and monitors the resource utilization of node groups or in kops terms [`instancegroups`](https://github.com/kubernetes/kops/blob/master/docs/instance_groups.md) and map to AutoScalingGroups in AWS. Configuring and enabling the Kubernetes Cluster Autoscaler is very simple and straightforward. However, as we will see, there are some additional complexities to be aware of in creating a scalable, highly-available multi-tenant Kubernetes cluster running Jenkins for multiple teams.
-## The Kubernetes Admission Controllers
-We could quickly and easily enable auto-scaling for our kops based Kubernetes cluster on AWS without using any additional features besides what is provided by the default Cluster Autoscaler configuration. However, there are a few reasons we don’t want to do that.
+## Resource Quotas and Autoscaling Don't Mix
+Efficient and effective management of compute resources is an important part of successful CI/CD and it is no different with a Kubernetes cluster. The Kubernetes [`ResourceQuota`](https://kubernetes.io/docs/concepts/policy/resource-quotas/) object allows you to limit cluster resource utilization by `namespace` - ensuring that each workload or team in an organization has what they need without negatively impacting others. `ResourceQuotas`, for example, allow you to specify the total compute resources, such as cpu and memory (among many other resources), that may be used by a `namespace` - think of them as over-utilization guardrails for your CI/CD resources. However, it is a static configuration. So if you were to increase the number of `nodes` in a cluster you would have to manually update the `ResourceQuota` to make additional resources available for any `namespace` with a `ResourceQuota` assigned. However, the topic of this post is how to dynamically up-scale and down-scale cluster `nodes` for Jenkins agents - but it not currently possible to dynamically modify `ResourceQuotas`. There doesn't seem much point in having dynamic autoscaling while having a manual process to modify `ResourceQuotas` in order to actually utilize the autoscaled resources - so  `ResourceQuotas` and autoscaling by `namespace` don't mix. But you still may want to provide some guardrails within a particular `namespace` so that one individual Jenkins job does not adversely effect other jobs relying on the same pool of Jenkins agents. There must be some reasonable limit for each individual Jenkins agent `pod`. Also, for a Kubernetes cluster configured to autoscale `nodes` we still want to ensure that no single `pod` is configured use more resources than are available on a single node as that `pod` will fail to launch. So we will define a `LimitRange` for the jenkins-agent `namespace` to assure realistic defaults and limits for each `container` in a `pod` and maximum cpu and memory for a `pod` overall. This will provide for more consistent and reasonable resource utilization and cluster autoscaling.
 
-1. We want to run a number of different workloads on our Kubernetes cluster - for example, in addition to providing dynamic Jenkins agents, we would also like to run Jenkins masters on the cluster and even deploy production applications to the same cluster. Of course you could set up separate clusters for each of these workloads, but the Kubernetes Namespace capability enables us to have true multi-tenant workload in the same cluster. We will use a specially configured Kubernetes `namespace` to create a dedicated `instancegroup` for the Jenkins agents.
-2. We want to initiate **up-scaling** before it is actually needed so that our Jenkins jobs aren’t queued long or at all. One might refer to this as predictive auto-scaling. We will use [**priority preemption**](https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/) to allow for overprovisioning that will result in scaling up before we need the new capacity of Jenkins agents. 
-
-To achieve both these goals, we turn to [Kubernetes Admission Controllers](https://kubernetes.io/docs/admin/admission-controllers/#what-are-they). Even if you don’t know what the Kubernetes Admission Controller is or does, chances are that you have benefited from one its many controllers if you have interacted with a Kubernetes cluster. For example, if you use a default `StorageClass` or a `ServiceAccount` then you are depending on an Admission Controller.
-{{< figure src="k8s-cluster-autoscaling.png" title="Kubernetes Autoscaling Architecture Overview" >}}
-See the addendum below on [configuring non-standard Admission Controllers for kops]({{< relref "#configure-kops-admission-controllers" >}}).
-##### PodNodeSelector
-The [PodNodeSelector](https://kubernetes.io/docs/admin/admission-controllers/#podnodeselector) **Admission Controller** allows you to place an annotation on a Kubernetes `namespace` that will automatically be assigned as a [nodeSelctor](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector) label/value to all `pods` that are created in that `namespace`. So with KOPS on AWS, all we have to do is create an InstanceGroup and apply a Node Label - in this case we will apply `jenkinsType: agent`. The we will create a dedicated Kubernetes `namespace` for agents with the `scheduler.alpha.kubernetes.io/node-selector` annotation:
-
-
-Now all the `pods` that are created in the **jenkins-agent** `namespace` will automatically have the `jenkinsType=agent` `node-selector` label/value applied to them and end up on the **agentnodes** `InstanceGroup` defined below:
-
+{{% codecaption caption="jenkinsAgentLimitRange.yml" %}}
 ```yaml
-apiVersion: kops/v1alpha2
-kind: InstanceGroup
+apiVersion: v1
+kind: LimitRange
 metadata:
-  creationTimestamp: 2018-05-01T11:28:57Z
-  labels:
-    kops.k8s.io/cluster: k8s.example.net
-  name: agentnodes
+  name: jenkins-agent-limit-range
+  namespace: jenkins-agents
 spec:
-  image: kope.io/k8s-1.8-debian-stretch-amd64-hvm-ebs-2018-02-08
-  machineType: m5.large
-  maxSize: 8
-  minSize: 1
-  nodeLabels:
-    jenkinsType: agent
-    kops.k8s.io/instancegroup: agentnodes
-  role: Node
-  subnets:
-  - us-east-1b
+  limits:
+  - type: Pod
+    max:
+      cpu: 3
+      memory: 12Gi
+  - type: Container
+    max:
+      cpu: 2
+      memory: 4Gi
+    default:
+      cpu: 2
+      memory: 4Gi
+    defaultRequest:
+      cpu: 0.25
+      memory: 500Mi
 ```
-Note the `nodeLabel` `jenkinsType` matched the `node-selector` in the **jenkins-agent** `namespace` above - both with a value of **agent**.
-##### Priority
-The [Priority](https://kubernetes.io/docs/admin/admission-controllers/#priority) Admission Controller allows you to add PriorityClass meta-data to a Pod on creation. This will allow the Kubernetes scheduler to evict lower priority Pods, making room for pending Pods with higher priorities.
+{{% /codecaption %}}
 
-## Configuring Non-Default Admission Controllers for KOPS {#configure-kops-admission-controllers}
-For the version of kops used for this post - `1.9.3` - the following Admission Controllers are enabled by default (as you can see in the code for kops 1.9 [here](https://github.com/kubernetes/kops/blob/release-1.9/pkg/model/components/apiserver.go#L227) that is based on a [recommended set of admission controllers](https://kubernetes.io/docs/admin/admission-controllers/#is-there-a-recommended-set-of-admission-controllers-to-use):
+> **NOTE:** Even though we won't be using `ResourceQuotas` for this example - it is interesting that `ResourceQuotas` and `LimitRanges` work hand-in-hand. If a `ResourceQuota` is sprecified for cpu and/or memory on a `namespace` then `pod` `containers` must specify limits or requests for cpu/memory or the `pod` may not be created. So it is recommended that a `LimitRange` is created for the same `namespace` so default values are automatically applied to any `containers` that don't specify cpu/memory limits or requests.
 
+## Why Autoscale
+The [Jenkins Kubernetes Plugin](https://github.com/jenkinsci/kubernetes-plugin) provides the capability to provision dynamic and ephemeral Jenkins agents as `Pods` managed by Kubernetes. And while very useful, that is not the same thing as autoscaling the actual physical resources or `nodes` these `Pods` are running. Without true autoscaling there will be a static amount of resources available for your Jenkins agents workload (and any other applications utilizing those same Kubernetes nodes); and when and if all of those resources are consumed - any additional Jenkins workload will be queued. Furthermore, if you have consistent (or random) spikes in your CI/CD workload then autoscaling your agent capacity could be a solution for shorter queues - especially in a cloud environment like AWS, Azure, GCP, etc.
+
+True autoscaling will allow your CI/CD to move as fast as it needs to - limiting slow-downs related to lack of infrastructure. But of course you will still want to set maximum limits to avoid large costs due to a mis-configured jobs or other user error - even with a `LimitRange` for the autoscaled `namespace`. And remember, down-scaling is just as important as up-scaling - it is the down-scaling that will help manage costs by removing under utilized `nodes`, while the up-scaling accelerates your CI/CD. Autoscaling will help reduce costs and maximize availability for your Jenkins agent workload.
+## Kubernetes Autoscaler Project
+The [Kubernetes Autoscaler](https://github.com/kubernetes/autoscaler) project provides a [Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler) component with support for AWS, GCP and Azure. A GA version was released alongside the release of Kubernetes 1.8.  The Cluster Autoscaler runs as a Kubernetes `Deployment` on your cluster and monitors the resource utilization of `node pools` or in kops terms [`InstanceGroups`](https://github.com/kubernetes/kops/blob/master/docs/instance_groups.md) - mapping to AutoScalingGroups in AWS. The Cluster Autoscaler will up-scale and down-scales `nodes` in a `node pool`/`instancegroup` based on `pod` consumption. Configuring and enabling the Kubernetes Cluster Autoscaler is very simple and straightforward. 
+
+> **NOTE:** There are two other prominent types of autoscaling for Kubernetes: 1) The [Horizontal Pod Autoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) and 2) The [Vertical Pod Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler). Put simply, the Horizontal Pod Autoscaler scales the number of `Pods` for a given application and is not a good fit for stateful, single `pod` applications like Jenkins masters or the ephemeral workload of Kubernetes based Jenkins agents. The Vertical Pod Autoscaler is of potential interest for both Jenkins masters and agents - as it will automatically adjust resource requirements for new and existing pods. One area of interest for the Vertical Pod Autoscaler is the capability to reduce the risk of containers running out of memory. This could be an excellent feature for Jenkins masters, allowing you to be more frugal with initial resource quotas with less risk. Definitely something worth taking a look at in a future post.
+
+## Namespace Specific Autoscaling
+We want to run a number of different workloads on our Kubernetes cluster - for example, in addition to providing dynamic Jenkins agents, we would also like to run Jenkins masters on the cluster and even deploy production applications to the same cluster. Of course you could set up separate clusters for each of these workloads, but the Kubernetes `Namespace` capability enables us to have true multi-tenant workload in the same cluster. For some workloads autoscaling is quite useful, whereas for other types of workloads autoscaling may not make sense, and may even be detrimental. Specifically, cluster autoscaling is detrimental for Jenkins masters. The Cluster Autoscaler will down-scale in addition to up-scaling - and when it scales down it will move/reschedule existing `pods` to other `nodes` in the pool so that `node` can be removed. This sudden unexpected stoppages is not a behavior we want for the Jenkins masters' workloads. But cluster autoscaling makes a lot of sense for Jenkins agents. So we will use the Jenkins agent `namespace` tied to a Jenkins agent `node pool` created in [part one of this series]({{< ref "segregating-jenkins-agents-on-kubernetes.md#putting-it-all-together" >}}) to ensure that only `nodes` used by Jenkins agents - and not other workloads - are autoscaled.
+
+{{< figure src="k8s-cluster-autoscaling.png" title="Kubernetes Autoscaling Architecture Overview Diagram" >}}
+### PodNodeSelector
+The [PodNodeSelector](https://kubernetes.io/docs/admin/admission-controllers/#podnodeselector) admission controller that we [setup in part one of this series]({{< ref "segregating-jenkins-agents-on-kubernetes.md#configure-kops-admission-controllers" >}}) allows for targeted cluster autoscaling. To revisit, the `PodNodeSelector` allows you to place an annotation on a Kubernetes `namespace` that will automatically be assigned as a [`nodeSelctor`](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector) label/value on all `pods` that are created in that `namespace`. We will configure the Cluster Autoscaler to specifically target the AWS AutoScalingGroup/`node pool`/`InstanceGroup` associated to the Jenkins agent `namespace` [created in part one of this series]({{< ref "segregating-jenkins-agents-on-kubernetes.md##jenkins-agent-instance-group" >}}) using the `PodNodeSelector`, so that only `nodes` used for Jenkins agent `pods` will be autoscaled. 
+
+### Cluster Autoscaler Deployment
+The following is an exerpt from the [cluster autoscaler example for running on a master node](https://github.com/kubernetes/autoscaler/blob/5ea4ddac977304302faa188f32b5965267374fc3/cluster-autoscaler/cloudprovider/aws/examples/cluster-autoscaler-run-on-master.yaml) with the only modification being for the `nodes` argument for the `cluster-autoscaler` `app`:
+{{% codecaption caption="clusterAutoscalerDeployment.yml" %}}
 ```yaml
-  kubeAPIServer:
-    admissionControl:
-    - Initializers
-    - NamespaceLifecycle
-    - LimitRanger
-    - ServiceAccount
-    - PersistentVolumeLabel
-    - DefaultStorageClass
-    - DefaultTolerationSeconds
-    - MutatingAdmissionWebhook
-    - ValidatingAdmissionWebhook
-    - NodeRestriction
-    - ResourceQuota
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  labels:
+    k8s-addon: cluster-autoscaler.addons.k8s.io
+    app: cluster-autoscaler
+...
+          command:
+            - ./cluster-autoscaler
+            - --v=4
+            - --stderrthreshold=info
+            - --cloud-provider=aws
+            - --skip-nodes-with-local-storage=false
+            - --nodes=1:10:agentnodes.k8s.kurtmadel.com
+...
 ```
-So we need to add the two additional admission controllers: `podNodeSelector` and `priority`. For **kops** you can do that by using the `kops edit cluster` command and if you are enabling additional admissoin controllers, such as these, on a new cluster you should do it before you apply the configuration or a rolling-update of all of your cluster nodes will be required. For the `podNodeSelector` it is as easy as adding it to the list of the `admissionControl` list for the `kubeAPIServer` configuration. 
+{{% /codecaption %}}
+The `cluster-autoscaler` deployment is in the `kube-system` `namespace` and is deployed to a master node.
