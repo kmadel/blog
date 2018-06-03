@@ -207,7 +207,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: pods-all
+  name: jenkins-agents
 subjects:
 - kind: ServiceAccount
   name: jenkins
