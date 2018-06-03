@@ -59,6 +59,7 @@ The [PodNodeSelector](https://kubernetes.io/docs/admin/admission-controllers/#po
 
 ### Cluster Autoscaler Deployment
 The following is an exerpt from the [cluster autoscaler example for running on a master node](https://github.com/kubernetes/autoscaler/blob/5ea4ddac977304302faa188f32b5965267374fc3/cluster-autoscaler/cloudprovider/aws/examples/cluster-autoscaler-run-on-master.yaml) with the only modification being for the `nodes` argument for the `cluster-autoscaler` `app`:
+
 {{% codecaption caption="clusterAutoscalerDeployment.yml" %}}
 ```yaml
 apiVersion: extensions/v1beta1
