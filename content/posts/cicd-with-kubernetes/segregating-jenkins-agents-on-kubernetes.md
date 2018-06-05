@@ -217,4 +217,4 @@ The primary difference between the example provided in the link above and the ab
 
 Now you can use the `ServiceAccount` and `jenkins-agents` `namespace` we created with [these instructions](https://github.com/jenkinsci/kubernetes-plugin#running-in-google-container-engine-gke) to configure the Kubernetes plugin for your Jenkins master and be assured that your distributed Jenkins agents will not negatively impact your Jenkins masters or any other workload you have running on your Kubernetes cluster.
 
-In the next post of the series [CI/CD on Kubernetes](/series/cicd-on-kubernetes/) we will explore autoscaling for the Jenkins agent workload.
+In the [next post]({{< ref "autoscaling-jenkins-agents-with-kubernetes.md" >}}) of the series [CI/CD on Kubernetes](/series/cicd-on-kubernetes/) we will explore autoscaling for the Jenkins agent workload.

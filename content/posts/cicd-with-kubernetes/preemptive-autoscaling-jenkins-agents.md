@@ -3,7 +3,7 @@ title: Preemptive Autoscaling Jenkins Agents with Kubernetes
 series: ["CICD on Kubernetes"]
 tags: ["Kubernetes","Jenkins","CI","CD","autoscaling","priority"]
 part: 3
-date: 2018-05-30T07:09:15-04:00
+date: 2018-06-07T07:09:15-04:00
 draft: true
 ---
 In [Part 2]({{< ref "autoscaling-jenkins-agents-with-kubernetes.md" >}}) of the series [CI/CD on Kubernetes](/series/cicd-on-kubernetes/) we set up cluster autoscaling for the Jenkins agent `namespace`/`node pool`. In Part 3 of this CI/CD on Kubernetes series we will utilize yet another admission controller to enable preemptive autoscaling for the Jenkins agents `node pool`. We want to initiate **up-scaling** before it is actually needed to minimize queueing of Jenkins jobs. I like to refer to this as **preemptive autoscaling** because we will use [**priority preemption**](https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/) to enable overprovisioning that will result in up-scaling before we need the new capacity for Jenkins agents. *Preemptive* autoscaling will help avoid, or at least limit, the amount of time that any Jenkins job spends in the Jenkins build queue waiting for new infrastructure to be scaled, but still only using the amount of infrastructure you need for any given window of time. 
