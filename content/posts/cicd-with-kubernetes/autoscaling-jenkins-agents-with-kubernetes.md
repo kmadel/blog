@@ -4,7 +4,7 @@ series: ["CICD on Kubernetes"]
 tags: ["Kubernetes","Jenkins","CI","CD","autoscaling"]
 part: 2
 date: 2018-06-04T23:09:15-04:00
-draft: true
+draft: false
 ---
 In [Part 1]({{< ref "segregating-jenkins-agents-on-kubernetes.md" >}}) of the series [CI/CD on Kubernetes](/series/cicd-on-kubernetes/) we used the `PodNodeSelector` admission controller to segregate the Jenkins workloads - agents from masters (and from any other workload running on the cluster). In Part 2 of this CI/CD on Kubernetes series we will utilize the segregated `jenkins-agents` `node pool` as part of an autoscaling solution for the Jenkins agent workload, without impacting the availability or performance of the Jenkins masters `node pool` or any other segregated workload on the cluster. But before diving into an autoscaling solution for Jenkins agents we will take a look at two ways to manage compute resources for containers with Kubernetes: `ResourceQuotas` and `LimitRanges`. Managing compute resources for the cluster will reduce the risk of a few rogue Jenkins jobs effecting the stability and availability of agent capacity, and ensure more predictable autoscaling. Because even though autoscaling compute resources for Jenkins agents is a terrific solution for flexibile and dynamic CI/CD capacity, there will always be a limits to how much up-scaling is possible - whether it is limits on cost or actual physical limitations of AWS itself.
 
@@ -31,15 +31,12 @@ spec:
   - type: Pod
     max:
       cpu: 3
-      memory: 12Gi
+      memory: 8Gi
   - type: Container
     max:
       cpu: 2
       memory: 4Gi
-    default:
-      cpu: 2
-      memory: 4Gi
-    defaultRequest:
+    min:
       cpu: 0.25
       memory: 500Mi
 ```
@@ -48,7 +45,7 @@ spec:
 > **NOTE:** Even though we won't be using `ResourceQuotas` for this example - it is interesting that `ResourceQuotas` and `LimitRanges` work hand-in-hand. If a `ResourceQuota` is specified for cpu and/or memory on a `namespace` then `pod` `containers` must specify limits or requests for cpu/memory or the `pod` may not be created. So it is recommended that a `LimitRange` is created for any `namespace` that has a `ResourceQuota` applied - so default values are automatically applied to any `containers` that don't specify cpu/memory limits or requests resulting in a successfully scheduled `pod`.
 
 ## Why Autoscale Agents
-The [Jenkins Kubernetes Plugin](https://github.com/jenkinsci/kubernetes-plugin) provides the capability to provision dynamic and ephemeral Jenkins agents as `Pods` managed by Kubernetes. And while very useful, that is not the same thing as autoscaling the actual physical resources or `nodes` where these `Pods` are running. Without true autoscaling, there will be a static amount of resources available for your Jenkins agents workload (and any other applications utilizing those same Kubernetes nodes); and when and if all of those resources are consumed - any additional Jenkins workload will be queued. Autoscaling the Jenkins agent capcity will help minimize queuing for expected or random spikes in a CI/CD workload - especially in a cloud environment like AWS, Azure, GCP, etc.
+The [Jenkins Kubernetes Plugin](https://github.com/jenkinsci/kubernetes-plugin) provides the capability to provision dynamic and ephemeral Jenkins agents as `Pods` managed by Kubernetes. And while very useful, that is not the same thing as autoscaling the actual physical resources or `nodes` where these `Pods` are running. Without true autoscaling, there will be a static amount of resources available for your Jenkins agents workload (and any other applications utilizing those same Kubernetes nodes); and when and if all of those resources are consumed - any additional Jenkins workload will be queued. Autoscaling the Jenkins agent capacity will help minimize queuing for expected or random spikes in a CI/CD workload - especially in a cloud environment like AWS, Azure, GCP, etc.
 
 True autoscaling will allow your CI/CD to move as fast as it needs to - greatly reducing slow-downs related to lack of infrastructure. But of course you will still want to set maximum limits to avoid large costs due to a mis-configured jobs or other user error - even with a `LimitRange` for the autoscaled `namespace`. And remember, down-scaling is just as important as up-scaling - it is the down-scaling that will help manage costs by removing under utilized `nodes`, while the up-scaling accelerates your CI/CD. Autoscaling will help manage costs and while maximizing the availability of Jenkins agents.
 ## Kubernetes Autoscaler Project
@@ -65,8 +62,8 @@ The [PodNodeSelector](https://kubernetes.io/docs/admin/admission-controllers/#po
 
 
 
-### Cluster Autoscaler Deployment
-The following is an excerpt from the [cluster autoscaler example for running on a master node](https://github.com/kubernetes/autoscaler/blob/5ea4ddac977304302faa188f32b5965267374fc3/cluster-autoscaler/cloudprovider/aws/examples/cluster-autoscaler-run-on-master.yaml) with the only modifications being for the `nodes` argument for the `cluster-autoscaler` `app`, the version of the `cluster-autoscaler` image used which maps to specific Kubernetes versions as documented [here](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler#releases) and in this case is `v1.1.0` for Kubernetes version 1.9.3 and the `AWS_REGION` envrionment variable:
+### Cluster Autoscaler Deployment {#cluster-autoscaler-deployment}
+The following is an excerpt from the [cluster autoscaler example for running on a master node](https://github.com/kubernetes/autoscaler/blob/5ea4ddac977304302faa188f32b5965267374fc3/cluster-autoscaler/cloudprovider/aws/examples/cluster-autoscaler-run-on-master.yaml) with the only modifications being for the `nodes` argument for the `cluster-autoscaler` `app`, the version of the `cluster-autoscaler` image used which maps to specific Kubernetes versions as documented [here](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler#releases) and in this case is `v1.1.0` for Kubernetes version 1.9.3 and the `AWS_REGION` envrionment variable: 
 {{% codecaption caption="clusterAutoscalerDeployment.yml" %}}
 ```yaml
 apiVersion: extensions/v1beta1
@@ -119,7 +116,7 @@ metadata:
 spec:
   image: kope.io/k8s-1.8-debian-stretch-amd64-hvm-ebs-2018-02-08
   machineType: m5.xlarge
-  maxSize: 2
+  maxSize: 1
   minSize: 10
   nodeLabels:
     jenkinsType: agents

@@ -103,7 +103,7 @@ If you already have a configuration entry for the `kubeAPIServer` then just add 
 So now that we have the `PodNodeSelector` admission controller enabled we can create the `node pools` and `namespaces`.
 #### Node Pools
 We will create two `node pools` - one for Jenkins masters and one for Jenkins agents.
-
+###### Jenkins Master Node Pool
 Create the `node pool` for Jenkins masters with `kops create ig jenkins-masters` and add `jenkinsType: master` as an additional `nodeLabel`. It should look similar to the following when you are done:
 ```yaml
 apiVersion: kops/v1alpha2
@@ -125,7 +125,8 @@ spec:
   subnets:
   - us-east-1b
 ```
-{#jenkins-agent-instance-group}Next we will create the `node pool` for Jenkins agents with `kops create ig jenkins-agents` and add `jenkinsType: agent` as an additional `nodeLabel`. It should look similar to the following when you are done:
+###### Jenkins Agent Node Pool {#jenkins-agent-instance-group}
+Next we will create the `node pool` for Jenkins agents with `kops create ig jenkins-agents` and add `jenkinsType: agent` as an additional `nodeLabel`. It should look similar to the following when you are done:
 ```yaml
 apiVersion: kops/v1alpha2
 kind: InstanceGroup
