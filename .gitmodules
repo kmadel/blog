@@ -1,7 +1,7 @@
 [submodule "themes/hemingway2"]
 	path = themes/hemingway2
 	url = https://github.com/kmadel/hemingway2.git
-[submodule "public"]
-	path = public
-	url = git@github.com:kmadel/kmadel.github.io.git
+[submodule "kmadel.github.io"]
+	path = kmadel.github.io
+	url = https://github.com/kmadel/kmadel.github.io.git
 	branch = master
