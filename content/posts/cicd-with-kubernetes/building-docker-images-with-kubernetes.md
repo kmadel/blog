@@ -3,12 +3,12 @@ title: Mounting the Docker Socket for your CI or testing environment? Think twic
 series: ["CICD on Kubernetes"]
 tags: ["Kubernetes","Jenkins","CI","CD","autoscaling","DIND","security"]
 part: 4
-date: 2019-01-05T23:09:15-04:00
+date: 2019-01-27T23:09:15-04:00
 draft: true
 ---
-Back in 2013, before Kubernetes was a thing, Docker was making Linux containers popular. At the same time, continuous integration (CI) was becoming a common best practice for application development. The use of Docker containers with CI began to be adopted as an easy and efficient way to manage CI tools - compilers, testing tools, security scans, etc. But it was new and there weren't a lot of best practices to adopt - it was more like 'go figure it out'. And early on, one very important aspect of using containers for CI/CD was using containers to build container images and pushing those images to a Docker registry - but again, this was all very new, and a lot of people didn't really know what they were doing and there wasn't a manual.
+Back in 2013, before Kubernetes was a thing, Docker was making Linux containers (LXC) much more accessible and Docker based containers were taking off. At the same time, continuous integration (CI) was becoming a common best practice for application development. The use of Docker containers with CI began to be adopted as an easy and efficient way to manage CI tools - compilers, testing tools, security scans, etc. But it was new and there weren't a lot of best practices to adopt - it was more like 'go figure it out'. And early on, one very important aspect of using containers for CI/CD was using containers to build container images and pushing those images to a Docker registry - but again, this was all very new, and a lot of people didn't really know what they were doing and there wasn't a manual.
 
-Fast forward a couple of years to September of 2015. Jérôme Petazzoni published an article entitled ["Using Docker-in-Docker for your CI or testing environment? Think twice."](https://jpetazzo.github.io/2015/09/03/do-not-use-docker-in-docker-for-ci/) The article basically describes how using Docker-in-Docker (DIND) is not a good choice for a CI/CD workload for a number of different reasons - it is definitely an article still worth a read. He promoted the concept of mounting the host Docker socket as a volume in a Docker container to accomplish similar functionality but without the drawbacks of DIND -  to include layer caching and requiring [privileged mode](https://blog.docker.com/2013/09/docker-can-now-run-within-docker/). In Part 4 of this CI/CD on Kubernetes series we will explore why it is a bad idea to use either of these two approaches for building and pushing container images from Kubernetes. We will look at this from two different perspectives: security and infrastructure/performance. Finally, we will take a look at an alternative approach.
+Fast forward a couple of years to September of 2015. Jérôme Petazzoni published an article entitled ["Using Docker-in-Docker for your CI or testing environment? Think twice."](https://jpetazzo.github.io/2015/09/03/do-not-use-docker-in-docker-for-ci/) The article basically describes how using Docker-in-Docker (DIND) is bad choice for a CI/CD workload for a number of different reasons - it is definitely an article still worth a read. He promoted the concept of mounting the host's Docker socket as a volume in a Docker container to accomplish similar functionality but without the drawbacks of DIND -  to include layer caching and requiring [privileged mode](https://blog.docker.com/2013/09/docker-can-now-run-within-docker/). In Part 4 of this CI/CD on Kubernetes series we will explore why it is a bad idea to use either of these two approaches for building and pushing container images from Kubernetes. We will look at this from two different perspectives: security and infrastructure/performance. Finally, we will take a look at an alternative approach.
 
 ## What's Wrong with Docker-in-Docker (DIND)
 
@@ -55,9 +55,10 @@ IAM on worker node
 Or more specifically, building container images without the Docker daemon. So
 
 ### Kaniko
+Kaniko is a tool that is capable of building Docker images without the Docker daemon.
 
 #### Kaniko with AWS and the ECR
-The Kaniko instructions tell you to create a Kubernetes secret for your `~/.aws/credentials` but many, if not most, organizations don't allow you to use aws credentials this way. 
+The Kaniko instructions tell you to create a Kubernetes secret for your `~/.aws/credentials` but most organizations don't allow you to use AWS credentials this way. 
 
 Use kube2iam 
 With kops you can add additional IAM policies to be applied to all Kubernetes nodes.
