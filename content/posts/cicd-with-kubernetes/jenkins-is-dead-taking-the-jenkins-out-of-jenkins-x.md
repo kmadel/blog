@@ -33,9 +33,9 @@ Before we get to the what, let's talk about why native K8s CD is important.
 ### So, what does it mean to be native K8s CD?
 - First, the CD process itself must run on and be orchestrated by K8s. This by itself does not constitute native K8s CD - as it is [very easy to run legacy Jenkins on K8s](https://github.com/helm/charts/tree/master/stable/jenkins).
 - Secondly, containers must be used to execute the steps of a CD pipline. Once again, this by itself does not constitute native K8s CD as legacy Jenkins has been using containers for CD pipeline steps since 2014 - as do many other CD tools like GitLab for example which is no more native K8s CD than legacy Jenkins.
-- Finally, to be native K8s CD the tool must leverage native K8s resources or more specifically, must be built on top of [Custom Resource Definitions (CRDs)](https://kubernetes.io/docs/tasks/access-kubernetes-api/custom-resources/custom-resource-definitions/). Legacy Jenkins does not fit this part of the native K8s CD definition. And actually, believe it or not, neither did Jenkins X - at least until recently.
+- Finally, to be native K8s CD the tool must leverage native K8s resources or more specifically, must be built on top of [Custom Resource Definitions (CRDs)](https://kubernetes.io/docs/tasks/access-kubernetes-api/custom-resources/custom-resource-definitions/). This allows you to use native Kubernetes tools like `kubectl` to interact with the tool. Legacy Jenkins does not fit this part of the native K8s CD definition. And actually, believe it or not, neither did Jenkins X - at least until recently.
 
-### So why wasn't Jenkins X native K8s CD before now? 
+### So why wasn't Jenkins X completely native K8s CD before now? 
 Jenkins X runs on and is orchestrated by K8s. Jenkins X uses containers to execute the steps of CD pipelines. Jenkins X even leverages [its very own CRDs](https://github.com/jenkins-x/jx/blob/master/pkg/kube/crds.go) - but up until recently, it still relied on legacy Jenkins to actually execute the CD pipeline. And even with the very cool [Serverless Jenkins](https://jenkins-x.io/news/serverless-jenkins/) capabilities it still had legacy Jenkins as its engine to process pipelines.
 
 ### So what has changed recently to make Jenkins X truly native K8s CD? 
