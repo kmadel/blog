@@ -2,7 +2,7 @@
 title: "Native Kubernetes Continuous Delivery: Why should you care?"
 series: ["Native Kubernetes Continuous Delivery"]
 tags: ["CI","CD","Tekton","Kubernetes","Native K8s CD"]
-date: 2019-03-30T21:00:15-04:00
+date: 2019-03-31T12:30:15-04:00
 photo: "/photos/k8s-cd/pathfinder-of-the-seas.jpg"
 photoCaption: "Pathfinder of the Sea, Monument Avenue, Richmond, VA<br>Photograph by Kurt Madel ©2019"
 exif: "SONY RX-100 ISO 125 37.1mm ƒ/4.9 1/250"
