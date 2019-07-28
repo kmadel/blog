@@ -1,13 +1,13 @@
 ---
 title: "Native Kubernetes Continuous Delivery: Why should you care?"
 series: ["Native Kubernetes Continuous Delivery"]
-tags: ["CI","CD","Tekton","Kubernetes","Native K8s CD"]
-date: 2019-03-31T12:30:15-04:00
+tags: ["CI","CD","Tekton","Prow","Jenkins X","Kubernetes","Native K8s CD"]
+date: 2019-03-31T11:30:15-04:00
 photo: "/photos/k8s-cd/pathfinder-of-the-seas.jpg"
 photoCaption: "Pathfinder of the Sea, Monument Avenue, Richmond, VA<br>Photograph by Kurt Madel ©2019"
 exif: "SONY RX-100 ISO 125 37.1mm ƒ/4.9 1/250"
 part: 1
-draft: true
+draft: false
 ---
 Native Kubernetes Continuous Delivery (Native K8s CD) is, by definition, cloud native, so I wanted to start with the [CNCF definition of cloud native](https://github.com/cncf/toc/blob/master/DEFINITION.md):
 
@@ -17,7 +17,7 @@ Native Kubernetes Continuous Delivery (Native K8s CD) is, by definition, cloud n
 
 >The Cloud Native Computing Foundation seeks to drive adoption of this paradigm by fostering and sustaining an ecosystem of open source, vendor-neutral projects. We democratize state-of-the-art patterns to make these innovations accessible for everyone.
 
-"Robust automation" is a key component of continuous delivery (and just to clarify, when I say continuous delivery that includes continuous integration). The definition also mentions "build" and "containers", and although those aren't mentioned in the same sentence, they come together quite nicely for continuous delivery. In this first part of this [series on Native Kubernetes Continuous Delivery](/series/native-kubernetes-continuous-delivery/) I will explain what Native K8s CD is and why it is important. But first let's take a brief look at the rise of containers, an integral component of *cloud native* and continuous delivery, before we explain exactly what I mean by Native K8s CD.
+"Robust automation" is a key component of continuous delivery (and just to clarify, when I say continuous delivery that includes continuous integration). The definition also mentions "build" and "containers", and although those aren't mentioned in the same sentence, they come together quite nicely for continuous delivery. In this post, the first part of a [series on Native Kubernetes Continuous Delivery](/series/native-kubernetes-continuous-delivery/), I will explain what Native K8s CD is and why it is important. But first let's take a brief look at the rise of containers, an integral component of *cloud native* and continuous delivery, before I explain exactly what I mean by Native K8s CD.
 
 ## Why?
 I'll do my best [Steve Ballmer impression](https://www.youtube.com/watch?v=Vhh_GeBPOhs), but instead of "Developers, developers, developers" - *ad infinitum* - it is **containers, containers, containers!** And yes, I am sweating. 
@@ -52,7 +52,7 @@ A number of large Kubernetes related projects have implemented their own CI/CD t
 [Jenkins X](https://jenkins-x.io/documentation/), a cloud native version of Jenkins, "is a CI/CD platform for Kubernetes." And Jenkins X - with its integration of Tekton and Prow - provides Native K8s CD.
 
 ### Why reinvent the wheel?
-A really interesting thing about a number of these Native K8s CD projects is the synergy between them. Prow integrated Knative Build as a job execution engine - [adding Tekton and Jenkins X support as job execution engines is in the works](https://github.com/kubernetes/test-infra/pull/11888). Knative Build, Tekton and Jenkins X use Prow for their own CI/CD. It is also worth pointing out that [Tekton and Jenkins X are both inaugural projects](https://cd.foundation/projects/) of the new [Continuous Delivery Foundation (CDF)](https://cd.foundation/). I believe this synergy will continue, and with the growing momemtum of the CDF, will make it easier than ever for all CI/CD practitioners to adopt Native K8s CD.
+A really interesting thing about a number of these Native K8s CD projects is the synergy between them. Prow integrated Knative Build as a job execution engine - [adding Tekton and Jenkins X support as job execution engines is in the works](https://github.com/kubernetes/test-infra/pull/11888). Knative Build, Tekton and Jenkins X use Prow for their own CI/CD. It is also worth pointing out that [Tekton and Jenkins X are both inaugural projects](https://cd.foundation/projects/) of the new [Continuous Delivery Foundation (CDF)](https://cd.foundation/). I believe this synergy will continue, and with the growing momentum of the CDF, will make it easier than ever for all CI/CD practitioners to adopt Native K8s CD.
 
 In the next posts in this series I will explore some of these tools/platforms in greater detail, explore the synergy between them and explain how they provide Native K8s CD. I will be taking a look at: [Tekton](../tekton-standardizing-native-kubernetes-cd), Prow and then look at how Jenkins X brings everything together in one easy to use Native K8s CD platform.
 
