@@ -72,7 +72,7 @@ metadata:
   name: default-priority
 value: 1
 globalDefault: true
-description: "Default PriorityClass for pods that don't specificy a PriorityClass."
+description: "Default PriorityClass for pods that don't specify a PriorityClass."
 ```
 {{% /codecaption %}}
 Note the setting of `globalDefault` to `true`.
@@ -88,12 +88,15 @@ globalDefault: false
 description: "Priority class used by overprovisioning."
 ```
 {{% /codecaption %}}
+
 ### Size Matters
 A key element of **Just-in-Time** autoscaling is that when an overprovisioned `pod` is preempted it leaves enough `cpu` and `memory` resources so that a Jenkins agent `pod` is able to be scheduled on that `node` immediately. To figure out the optimum size for the *overprovisoned preemptible pod(s)* we need to look at both the *instance types* selected for the Jenkins agent `node pool` and the `LimitRange` applied to `pods` and `containers` for Jenkins agent `pods`. We set a `machineType` of `m5.xlarge` for the Jenkins agent `node pool` in the [first part of this series]({{< ref "segregating-jenkins-agents-on-kubernetes.md#jenkins-agent-instance-group" >}}). An `m5.xlarge` has *4 vCPU* and *16Gib of memory*. Next we have to account for `LimitRanges` and in the second part of this series [we set **Limit Ranges**]({{< ref "autoscaling-jenkins-agents-with-kubernetes.md#limit-ranges" >}}) for the `pods` and `containers` in the Jenkins agent `node pool`. We set the minimum `cpu` to *0.25* and minimum `memory` to *500Mi*, and the maximum `cpu` to *2* and the maximum `memory` to *4Gi* for `containers`. The maximum for an entire `pod` (sum of all `containers` in a `pod`) was set to *3* `cpu` and *8Gi* `memory`.
 
 Now that we know the amount of `cpu` and `memory` that is available for a Jenkins agent `node` and the `LimitRange` for Jenkins agent `pods` we can figure out the sizing for the **overprovisoned preemptible `pod(s)`** `Deployment`. For this example we want to configure the `Deployment` so that there is preemptible capacity for either two Jenkins agent `pods` with two `containers` using the default limits for a total of 1 `cpu` and 2Gi `memory` **OR** one Jenkins agent `pod` where the default JNLP `container` uses the default limits and the second job specific `container` (for example maven) uses max limits for a total of 2.25 `cpu` and 4.5Gi `memory`. We also want to ensure that the overprovisioning `Deployment` is able to be scheduled on one `node` so that the Jenkins agent `node pool` is able to be scaled down to one `node` when there are no Jenkins agent requests.
+
 ###### Overprovisioning Deployment
 Now that we have figured out the `cpu` and `memory` requests based on the `cpu` and `memory` availale on a Jenkins agent `node` and the `LimitRange` for Jenkins agent `pods`, we will create a `Deployment` for the preemptible `pods` utilizing the special **pause** containers mentioned above.
+
 {{% codecaption caption="overprovisioningDeployment.yml" %}}
 ```yaml
 apiVersion: apps/v1
@@ -121,9 +124,12 @@ spec:
             memory: "1Gi"
 ```
 {{% /codecaption %}}
+
 With 5 `replicas` and the above `cpu` and `memory` request for the *pause* `container` the `Deployment` will have a total footprint of *2.5* `cpu` and *5Gi* of `memory` - easily fitting on one Jenkins agent `node` as specified for this example environment. Furthermore, by using multiple `replicas` we will increase the likelihood of having enough capacity on any up-scaled `node` for the largest possible Jenkins agent `pod` with *3* `cpu` and *8Gi* of `memory`.
+
 ### Update the Cluster Autoscaler Deployment
 Finally, to make all of this work, we need to make a minor change to the [`clusterAutoscalerDeployment.yml` from part two]({{< ref "autoscaling-jenkins-agents-with-kubernetes.md#cluster-autoscaler-deployment" >}}). By default, the Cluster Autoscaler will kill any pods with a `priority` less than *0* when scaling down and won't initiate scale-up for these pods. However, this behavior can be overridden by setting the [`expendable-pods-priority-cutoff`](https://github.com/kubernetes/autoscaler/blob/3d07f9c450f1ce66f8f0b25769c0114dcf2ba88d/cluster-autoscaler/main.go#L149) flag to *-1* in this case, to match the **overprovisioning**  `PriorityClass` created above. Once those changes are applied to the Cluster Autoscaler `Deployment` we will have **Just-in-Time** autoscaling for our Jenkins agents. We just need to update the `command` section of the [configuration from the last post]({{< ref "autoscaling-jenkins-agents-with-kubernetes.md#cluster-autoscaler-deployment" >}}) with the `expendable-pods-priority-cutoff` flag and apply the change:
+
 {{% codecaption caption="clusterJustInTimeAutoscalerDeployment.yml" %}}
 ```yaml
           command:
@@ -147,9 +153,11 @@ The following diagrams illustrate four distinct phases of **Just-in-Time** autos
 >**NOTE:** Although GKE supports both autoscaling and priority/premption you are not able to modify the `expendable-pods-priority-cutoff` flag of the Cluster Autoscaler. To work around this you will have to utilize a `PriorityClass` value of **0** for overprovisiong - as that is the default value for the Cluster Autoscaler.
 
 ## Tradeoffs Between Speed and Cost
+
 ### Under Utilized Nodes
 When there are no agent `pods` there will still be at least one un-utilized `node` for the **overprovisoned preemptible pod(s)**.
 Furthermore, when an up-scale is initiated - a Jenkins agent `pod` may never end up on the new node - that is, the Jenkins agent `pod(s)` that initiated an up-scale may complete their work and be removed before more additional agent capacity is needed on the new `node` and a down-scale occurs before the up-scaled `node` is utilized by any Jenkins workload. One way to reduce this is to modify the **Cluster Autoscaler** `scaleDownUnneededTime` flag - by default it is 10 minutes but something lower than that may be more suitable for your CI/CD environment and reduce under utilization of the agent `nodes`.
+
 ### Faster CI and CD
 If you only look at cost from a cloud infrastructure point of view then under-utilized resources are definitely a big drawback of **Just-in-Time** autoscaling. But if you look at cost relative to the delivery of code to production and, more importantly, delivery of features to customers, then the increased speed may be well worth the additional infrastructure costs to support **Just-in-Time** autoscaling and faster CI/CD.
 
